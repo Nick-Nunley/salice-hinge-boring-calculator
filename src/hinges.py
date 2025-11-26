@@ -169,6 +169,4 @@ class SaliceSilentia100Series(HingeSeriesBase):
 
 
 # Registering subclass aliases
-register_hinge_series("salice_100", SaliceSilentia100Series)
-register_hinge_series("salice_silentia_100", SaliceSilentia100Series)
 register_hinge_series("100", SaliceSilentia100Series)
