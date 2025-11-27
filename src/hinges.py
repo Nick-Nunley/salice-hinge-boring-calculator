@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Iterable
 from abc import ABC
 
 from src.models import BoringTables
@@ -250,3 +250,57 @@ class SaliceSilentia200_94Series(HingeSeriesBase):
 # Registering subclass aliases
 register_hinge_series("100", SaliceSilentia100Series)
 register_hinge_series("200-94", SaliceSilentia200_94Series)
+
+
+def _range_mid(s: HingeSeriesBase) -> float:
+    if s.max_door_thickness_mm is None:
+        return s.min_door_thickness_mm
+    return 0.5 * (s.min_door_thickness_mm + s.max_door_thickness_mm)
+
+
+def select_hinge_series_for_thickness(
+    thickness_mm: float,
+    required_opening_angle_deg: Optional[float] = None,
+    ) -> HingeSeriesBase:
+    """
+    Select the most appropriate hinge series for a given door thickness (and
+    optionally a minimum opening angle).
+
+    Currently uses all registered hinge series in HINGE_SERIES_REGISTRY,
+    instantiates each with default parameters, and filters by:
+
+      1) supports_thickness(thickness_mm)
+      2) opening_angle_deg >= required_opening_angle_deg (if provided)
+
+    If multiple candidates remain, we pick the one whose thickness range
+    is 'closest' to the requested thickness (by the midpoint of its range).
+
+    Raises:
+        ValueError if no hinge series support the given thickness/angle.
+    """
+    if not HINGE_SERIES_REGISTRY:
+        raise ValueError("No hinge series registered.")
+
+    candidates: list[HingeSeriesBase] = []
+
+    for cls in HINGE_SERIES_REGISTRY.values():
+        series = cls()  # uses default tables / hinge-count
+        if not series.supports_thickness(thickness_mm):
+            continue
+        if required_opening_angle_deg is not None:
+            if series.opening_angle_deg < required_opening_angle_deg:
+                continue
+        candidates.append(series)
+
+    if not candidates:
+        msg = f"No hinge series supports thickness {thickness_mm}mm"
+        if required_opening_angle_deg is not None:
+            msg += f" with opening angle >= {required_opening_angle_deg} degrees"
+        raise ValueError(msg)
+
+    # Pick the hinge whose thickness range 'center' is closest to requested T
+    best = min(
+        candidates,
+        key=lambda s: abs(_range_mid(s) - thickness_mm),
+        )
+    return best

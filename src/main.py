@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from src.hinges import get_hinge_series
+from src.hinges import get_hinge_series, select_hinge_series_for_thickness, HINGE_SERIES_REGISTRY
 from src.models import DoorSpec, calculate_boring
 
 
@@ -18,17 +18,28 @@ def _prompt_float(prompt: str, allow_blank: bool = False) -> Optional[float]:
             print("Please enter a numeric value.")
 
 def main() -> None:
-    print("Available hinge series: salice_100")
+    thickness = _prompt_float("Door thickness T (mm): ")
 
-    series_key = input("Enter hinge series key: ").strip()
-    series = get_hinge_series(series_key)
+    # --- Hinge selection mode --- #
+    mode = input(
+        "Hinge selection mode: [A]utomatic based on thickness (default) "
+        "or [M]anual series key? "
+    ).strip().lower()
 
-    print(f"Using hinge series: {series.display_name}")
+    if mode in ("", "a"):
+        # Automatic: let the helper pick a series for us
+        series = select_hinge_series_for_thickness(thickness_mm=thickness)
+        print(f"Automatically selected hinge series: {series.display_name}")
+    else:
+        # Manual: show available keys and let user choose
+        print(f"Available hinge series keys: {list(HINGE_SERIES_REGISTRY.keys())}")
+        series_key = input("Enter hinge series key: ").strip()
+        series = get_hinge_series(series_key)
+        print(f"Using hinge series: {series.display_name}")
     print(f"Supported door thickness range: {series.min_door_thickness_mm}-"
           f"{series.max_door_thickness_mm} mm")
     print(f"Allowed K range: {series.min_k_mm}-{series.max_k_mm} mm\n")
 
-    thickness = _prompt_float("Door thickness T (mm): ")
     height = _prompt_float("Door height (mm) [optional, press Enter to skip]: ", allow_blank=True)
     weight = _prompt_float("Door weight (kg) [optional, press Enter to skip]: ", allow_blank=True)
     desired_k = _prompt_float(

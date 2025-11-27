@@ -4,7 +4,7 @@ import streamlit as st
 
 from typing import Optional, List
 
-from src.hinges import get_hinge_series, HINGE_SERIES_REGISTRY
+from src.hinges import get_hinge_series, select_hinge_series_for_thickness, HINGE_SERIES_REGISTRY
 from src.models import DoorSpec, calculate_boring
 
 
@@ -55,9 +55,9 @@ def main() -> None:
             )
         st.stop()
 
-    series_keys = sorted(HINGE_SERIES_REGISTRY.keys())
-    # Try to default to "100" if present
-    default_index = series_keys.index("100") if "100" in series_keys else 0
+    default_key = 'Automatic'
+    series_keys = [default_key] + sorted(HINGE_SERIES_REGISTRY.keys())
+    default_index = series_keys.index(default_key)
 
     series_key = st.sidebar.selectbox(
         "Select hinge series",
@@ -65,17 +65,30 @@ def main() -> None:
         index=default_index,
         )
 
-    # Instantiate the selected series
-    series = get_hinge_series(series_key)
+    # Instantiate the selected series if a manual one is specified
+    series_for_sidebar = None
+    default_k_label_suffix: str
 
-    st.sidebar.markdown(f"**Series:** {series.display_name}")
-    st.sidebar.markdown(
-        f"**Door thickness range:** {series.min_door_thickness_mm}-"
-        f"{series.max_door_thickness_mm} mm"
-        )
-    st.sidebar.markdown(
-        f"**Allowed K range:** {series.min_k_mm}-{series.max_k_mm} mm"
-        )
+    if series_key == default_key: # Automatic mode: we can’t instantiate until we know thickness
+        st.sidebar.info(
+            "Hinge series will be selected automatically based on door "
+            "thickness after you enter values."
+            )
+        default_k_label_suffix = "optional - leave blank to use the hinge default"
+    else:
+        series = get_hinge_series(series_key)
+
+        st.sidebar.markdown(f"**Series:** {series.display_name}")
+        st.sidebar.markdown(
+            f"**Door thickness range:** {series.min_door_thickness_mm}-"
+            f"{series.max_door_thickness_mm} mm"
+            )
+        st.sidebar.markdown(
+            f"**Allowed K range:** {series.min_k_mm}-{series.max_k_mm} mm"
+            )
+        default_k_label_suffix = (
+            f"optional - leave blank to use default K={series.default_k()} mm"
+            )
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(
@@ -94,9 +107,8 @@ def main() -> None:
             height_str = st.text_input("Door height (mm) (optional)", value="")
         with col2:
             weight_str = st.text_input("Door weight (kg) (optional)", value="")
-            default_k = series.default_k()
             k_str = st.text_input(
-                f"Boring distance K (mm) (optional, default {default_k})",
+                f"Boring distance K (mm) ({default_k_label_suffix})",
                 value="",
                 )
 
@@ -117,6 +129,16 @@ def main() -> None:
         for e in errors:
             st.error(e)
         st.stop()
+
+    if series_key == default_key: # Automatic selection based on thickness (and opening angle later if desired)
+        try:
+            series = select_hinge_series_for_thickness(thickness_mm=thickness)
+        except ValueError as e:
+            st.error(str(e))
+            st.stop()
+        st.info(f"Automatically selected hinge series: {series.display_name}")
+    else: # Manual: use the already-instantiated series
+        st.info(f"Using hinge series: {series.display_name}")
 
     # Build DoorSpec
     door = DoorSpec(
